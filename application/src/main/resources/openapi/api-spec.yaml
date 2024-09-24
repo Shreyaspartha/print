@@ -1,0 +1,729 @@
+openapi: 3.0.2
+info:
+  version: '1.3'
+  title: SAP Print Service
+  description: "SAP Print service offers public APIs, including Query Print Queue, Upload Documents and Create Print Task that can help manage print queues, connect print clients and monitor print status.  \nThis API is implemented based on REST API specification."
+externalDocs:
+  description: Help Document
+  url: https://help.sap.com/viewer/product/SCP_PRINT_SERVICE/SHIP/en-US
+x-sap-shortText: Manage print queue and create print queue items
+servers:
+  - url: https://api.{region}.print.services.sap
+    variables:
+      region:
+        description: The region chosen while deploying the application on SAP Business Technology Platform
+        default: eu10
+paths:
+  /qm/api/v1/rest/queues:
+    get:
+      tags:
+        - Queues
+      summary: Get print queue list
+      description: Returns a list of the existing print queues from SAP Print service. You can then pick a print queue and use it for the next API call, for example, to create a print task.
+      responses:
+        '200':
+          description: Retrieved print queues.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintQueueDTOList'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/PrintQueueDTOList'
+        '500':
+          description: "The schema doesn't exist. \n"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: schema.not.exist
+                      message:
+                        type: string
+                        example: Unfortunately, your tenant can't be found. Please contact your administrator to check the subscription status.
+  /qm/api/v1/rest/queues/{qname}:
+    put:
+      tags:
+        - Queues
+      summary: Create print queue
+      description: Creates a print queue in SAP Print service.
+      parameters:
+        - name: qname
+          in: path
+          required: true
+          description: The queue name should be the same as the queue name in the body.
+          example: newQueue
+          schema:
+            type: string
+        - name: If-None-Match
+          description: This value is always set to '*'.
+          in: header
+          required: true
+          schema:
+            type: string
+            example: '*'
+      requestBody:
+        description: Creates a print queue with the given information, such as qname, qdescription, qstatus, qformat and techUserName.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrintQueueDTO'
+      responses:
+        '204':
+          description: Print queue successfully created
+        '400':
+          description: |
+            Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+              examples:
+                error1:
+                  summary: techuser.type.int
+                  value:
+                    error:
+                      code: techuser.type.int
+                      message: Print user {name} is created for integration use and can't be assigned to any queues. Please enter another valid user.
+                error2:
+                  summary: pq.creator.missing
+                  value:
+                    error:
+                      code: pq.creator.missing
+                      message: Please enter the print queue creator.
+                error3:
+                  summary: pq.creator.invalid
+                  value:
+                    error:
+                      code: pq.creator.invalid
+                      message: 'The queue creator is invalid. The name of the creator cannot include \" / \\ [ ] : ; | = , + * ? < >, spaces, and the length must be > 0 and <= 80.'
+                error4:
+                  summary: user.not.exist
+                  value:
+                    error:
+                      code: user.not.exist
+                      message: Print user {name} doesn't exist, please enter an existing user.
+                error5:
+                  summary: cleanup.period.not.valid
+                  value:
+                    error:
+                      code: cleanup.period.not.valid
+                      message: The retention period should be between 1 and 7.
+                error6:
+                  summary: PQ.name.not.validated
+                  value:
+                    error:
+                      code: PQ.name.not.validated
+                      message: The queue name {name} is invalid. It can include A-Z, a-z, 0-9, underscore and hyphen. It can't exceed 32 chararters.
+                error7:
+                  summary: PQ.name.not.consistent
+                  value:
+                    error:
+                      code: PQ.name.not.consistent
+                      message: The queue name is not consistent between body and url path variable.
+        '412':
+          description: |
+            Precondition failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+              examples:
+                error1:
+                  summary: ifNoneMatch.header.wrong.content
+                  value:
+                    error:
+                      code: ifNoneMatch.header.wrong.content
+                      message: If-None-Match header only allows '*' as input value.
+                error2:
+                  summary: PQ.already.exist
+                  value:
+                    error:
+                      code: PQ.already.exist
+                      message: The print queue already exists. Please choose a different queue name.
+        '429':
+          description: |
+            Too many requests. The service is busy and doesn't permit further calls.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: rate.limiter.error
+                      message:
+                        type: string
+                        example: The service is busy and doesn't permit further calls.
+        '500':
+          description: |
+            Unfortunately, the schema wasn't created successfully. If this error persists, please contact the component BC-CCM-PRN-OM-SCP.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: schema.not.exist
+                      message:
+                        type: string
+                        example: Unfortunately, the schema wasn't created successfully. If this error persists, please contact the component BC-CCM-PRN-OM-SCP.
+  /dm/api/v1/rest/print-documents:
+    post:
+      tags:
+        - Documents
+      summary: Send print document
+      description: Upload your business document to the cloud storage of SAP Print service. The object ID is generated accordingly, which you can reuse for the PUT operation /qm/api/v1/rest/print-tasks/{itemId} on the Print Tasks resource later.
+      parameters:
+        - name: If-None-Match
+          description: This value is always set to '*'.
+          in: header
+          required: true
+          schema:
+            type: string
+            example: '*'
+        - name: scan
+          description: Set to true to enable virus scan. Set to false to skip virus scan.
+          in: header
+          required: false
+          schema:
+            type: boolean
+            example: 'true'
+            default: 'true'
+      requestBody:
+        description: Document file
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Document successfully uploaded
+          content:
+            plain/text:
+              schema:
+                type: string
+                example: |
+                  4056bb6c-f544-41d7-87e1-ffe818573e6e
+        '400':
+          description: There is no document in the request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+              examples:
+                error1:
+                  summary: document.required
+                  value:
+                    error:
+                      code: document.required
+                      message: There is no document in the request.
+                error2:
+                  summary: document.content.cannot.empty
+                  value:
+                    error:
+                      code: document.content.cannot.empty
+                      message: The document content can't be empty.
+                error3:
+                  summary: document.zid.required
+                  value:
+                    error:
+                      code: document.zid.required
+                      message: There is no 'Zid' header in the request.
+        '413':
+          description: The request entity is too large.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: request.entity.too.large
+                      message:
+                        type: string
+                        example: The request entity is too large.
+        '429':
+          description: |
+            Too many requests. The service is busy and doesn't permit further calls.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: rate.limiter.error
+                      message:
+                        type: string
+                        example: The service is busy and doesn't permit further calls.
+        '500':
+          description: Virus scan failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: document.virus.scan.failed
+                      message:
+                        type: string
+                        example: Virus scan failed {error message}
+  /qm/api/v1/rest/print-tasks/{itemId}:
+    put:
+      tags:
+        - Print Tasks
+      summary: Create print task
+      description: Send the business document to the particular print queue that is created in SAP Print service. You can specify information, for example, numberOfCopies, username, etc.
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          description: The itemId should be the same as any one of the objectKey in the body. Once an objectKey is chosen as itemId, it is considered as the main document during print queue item creation. The rest of the objectKeys are considered as the attachments that will be associated to that main document.
+          example: 0adcfcae-4119-4225-b031-3d5718165798
+          schema:
+            type: string
+        - name: If-None-Match
+          description: This value is always set to '*'.
+          in: header
+          required: true
+          schema:
+            type: string
+            example: '*'
+      requestBody:
+        description: You can create a print task. The itemId should be identical to one of the documentIds from printContents. The documentId should be created successfully via the POST operation /dm/api/v1/rest/print-documents on the Documents resource. The qname should be included in the response of GET operation qm/api/v1/rest/queues on the Queues resource. If you want to print the attached document that is associated with the specific main document, the documentName should include the extension, for example, attachment.pdf.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrintTask'
+      responses:
+        '204':
+          description: Print task successfully created
+        '400':
+          description: |
+            Paas Tenant Information is null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+              examples:
+                error1:
+                  summary: printTask.metadata.length
+                  value:
+                    error:
+                      code: printTask.metadata.length
+                      message: The length of the metadata can't be exceeded.
+                error2:
+                  summary: printTask.metadata.wrong.type
+                  value:
+                    error:
+                      code: printTask.metadata.wrong.type
+                      message: The metadata format is wrong.
+                error3:
+                  summary: printTask.metadata.missing.version
+                  value:
+                    error:
+                      code: printTask.metadata.missing.version
+                      message: The metadata version is mandatory.
+        '412':
+          description: |
+            Precondition failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: ifNoneMatch.header.wrong.content
+                      message:
+                        type: string
+                        example: If-None-Match header only allows '*' as input value.
+        '429':
+          description: |
+            Too many requests. The service is busy and doesn't permit further calls.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: rate.limiter.error
+                      message:
+                        type: string
+                        example: The service is busy and doesn't permit further calls.
+        '500':
+          description: |
+            Unfortunately, the schema wasn't created successfully. If this error persists, please contact the component BC-CCM-PRN-OM-SCP.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: schema.not.exist
+                      message:
+                        type: string
+                        example: Unfortunately, the schema wasn't created successfully. If this error persists, please contact the component BC-CCM-PRN-OM-SCP.
+  /qm/api/v1/rest/queues/{qname}/profiles:
+    get:
+      tags:
+        - Print Profile
+      summary: Get print profile
+      description: Fetch and check the print profile information for each print queue. Afterwards, you can specify the valid profileName for the particular print task using the Print Tasks resource. Then, SAP Print service will directly pass those profile parameters to local physical printers. The profileParams field is reserved to return the profile parameter detail. It is empty in the current version. If you have any reasonable use case that needs this data, please contact us using our support component BC-CCM-PRN-OM-SCP.
+      parameters:
+        - name: qname
+          in: path
+          required: true
+          description: The queue name should exist.
+          example: pq01
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Retrieved print profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintProfileDTOList'
+            application/xml:
+              schema:
+                $ref: '#/components/schemas/PrintProfileDTOList'
+        '400':
+          description: |
+            Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+              examples:
+                error1:
+                  summary: invalid.tenant.id
+                  value:
+                    error:
+                      code: invalid.tenant.id
+                      message: The tenant Id is invalid.
+                error2:
+                  summary: PQ.not.exist
+                  value:
+                    error:
+                      code: PQ.not.exist
+                      message: The print queue doesn't exist.
+                error3:
+                  summary: required.request.header.missing
+                  value:
+                    error:
+                      code: required.request.header.missing
+                      message: The required request header 'Zid' for method parameter type String is not present.
+        '403':
+          description: |
+            Invalid owner.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: invalid.owner
+                      message:
+                        type: string
+                        example: You don't have the authorization to access this queue.
+  /anonymize/api/v1.0/anonymize:
+    post:
+      deprecated: true
+      x-sap-deprecated-operation:
+        deprecationDate: '2024-09-06'
+      tags:
+        - Anonymization (Beta)
+      summary: Upload a file for anonymization
+      description: By applying anonymization techniques, this operation offers the suitable capacity to anonymize Personally Identifiable Information (PII) for your customer data. It can support you to mask email, address, phone, and URL for personal data. Currently, it is still inBeta release and only available in the EU20 region. If you have a specific requirement and want to improve the accuracy of anonymization, please contact our support component BC-CCM-PRN-OM-SCP.
+      parameters:
+        - name: entities
+          in: query
+          description: Use the default entities for anonymization.
+          example: profile-email; profile-address; profile-person; profile-phone; profile-url
+          schema:
+            type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                text_file:
+                  type: string
+                  format: binary
+                  description: The supported document types are\:.jpeg, .jpg, .png, .pdf, .text, .json
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+                example: pdf binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+                example: png binary
+            image/jpeg:
+              schema:
+                format: binary
+                example: jpeg  binary
+            text/html:
+              schema:
+                type: string
+                example: '{"result": [{"ticket_id": "12345", "description":"Dear HR, I want to ask for sick leave for one day. Best Regards, <person>"}]}'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Wrong Input parameters
+        '500':
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Failed adding task to the queue, please contact your administrator.
+components:
+  securitySchemes:
+    oauth2api:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://{identityzone}.authentication.{region}.hana.ondemand.com/oauth/token
+          scopes: {}
+  schemas:
+    PrintProfileDTO:
+      type: object
+      properties:
+        queueName:
+          type: string
+          nullable: false
+          example: pq01
+        profileName:
+          type: string
+          nullable: false
+          example: profile_01
+        profileParams:
+          type: string
+          nullable: true
+          example: null
+        profileStatus:
+          type: string
+          nullable: false
+          example: OK
+      xml:
+        name: PrintProfileDTO
+    PrintProfileDTOList:
+      type: array
+      items:
+        $ref: '#/components/schemas/PrintProfileDTO'
+    PrintQueueDTO:
+      type: object
+      properties:
+        qname:
+          type: string
+          nullable: false
+          example: pq01
+        qdescription:
+          type: string
+          nullable: false
+          example: Example Print Queue
+        qformat:
+          type: string
+          nullable: false
+          example: acrobat6.xdc
+        qformatDescript:
+          type: string
+          nullable: false
+          example: PDF
+        cleanupPrd:
+          type: integer
+          nullable: false
+          example: 1
+        techUserName:
+          type: string
+          nullable: false
+          example: tech_user
+        locationId:
+          type: string
+          nullable: false
+          example: PLT_01
+        locationIdType:
+          type: string
+          nullable: false
+          example: PLT
+        creator:
+          type: string
+          nullable: false
+          example: user_name@company.com
+      xml:
+        name: PrintQueueDTO
+    PrintQueueDTOList:
+      type: array
+      items:
+        $ref: '#/components/schemas/PrintQueueDTO'
+    PrintTask:
+      type: object
+      properties:
+        numberOfCopies:
+          type: integer
+          nullable: false
+          example: 1
+        username:
+          type: string
+          nullable: false
+          example: test user
+        qname:
+          type: string
+          nullable: false
+          example: pq01
+        profileName:
+          type: string
+          nullable: true
+          example: Defaults
+        metadata:
+          type: object
+          properties:
+            business_metadata:
+              type: object
+              nullable: false
+              properties:
+                business_user:
+                  type: string
+                  nullable: false
+                  example: user1
+                object_node_type:
+                  type: string
+                  nullable: false
+                  example: object_node_1
+            version:
+              type: number
+              nullable: false
+              example: 1.2
+        printContents:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrintContent'
+          example:
+            - objectKey: 0adcfcae-4119-4225-b031-3d5718165798
+              documentName: main document name
+            - objectKey: 0adcfcae-4119-4225-b031-3d5718165854
+              documentName: attachment_document_one.pdf
+            - objectKey: 0adcfcae-4119-4225-b031-3d5718165123
+              documentName: attachment_document_two.pdf
+            - objectKey: 0adcfcae-4119-4225-b031-3d5718165234
+              documentName: attachment_document_three.pdf
+      xml:
+        name: PrintTask
+    PrintContent:
+      type: object
+      properties:
+        objectKey:
+          type: string
+          nullable: false
+          example: 0adcfcae-4119-4225-b031-3d5718165798
+        documentName:
+          type: string
+          nullable: false
+          example: test document name
+      xml:
+        name: PrintContent
+security:
+  - oauth2api: []

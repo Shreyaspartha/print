@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+vcap:
+  services:
+    print:
+      credentials:
+        clientId: sb-88806e35-d1d9-4a01-badf-3c6a230f97c2!b182559|print-app!b2085
+        clientSecret: e007c629-9672-411c-88c4-68bed28bfd8f$hJ46FSJpBhGRke_eiSaHbVi4AhKbdH64iVQgPoiOuCU=
+        uaaDomain: authentication.eu12.hana.ondemand.com
+        subscriberDomain: cnssb-hands-on-provider
+
+---
+#-- The below configuration is enabled **only** when activating the 'local' profile for Spring Boot
+spring:
+  config:
+    activate:
+      on-profile:
+        - local
+
+#-- The following lines are required to run your application locally. Please refer to this documentation for further information:
+#-- https://github.com/SAP/cloud-security-xsuaa-integration/tree/main/spring-security#local-setup-fails-with-application-failed-to-start
+sap:
+  security:
+    services:
+      xsuaa:
+        xsappname: your-app-name
+        uaadomain: uaadomain
+        clientid: your-client-id
+        clientsecret: your-client-secret
+        url: https://yourdomain.uaadomain
